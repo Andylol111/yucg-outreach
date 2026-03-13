@@ -1,0 +1,170 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import Dashboard from './pages/Dashboard';
+import Scraper from './pages/Scraper';
+import EmailStudio from './pages/EmailStudio';
+import Campaigns from './pages/Campaigns';
+import CampaignDetail from './pages/CampaignDetail';
+import Analytics from './pages/Analytics';
+import Settings from './pages/Settings';
+import LoginPage from './pages/LoginPage';
+import MainApp from './pages/MainApp';
+import ErrorBoundary from './components/ErrorBoundary';
+
+const API_BASE = typeof window !== 'undefined' && window.location.protocol === 'https:'
+  ? 'https://localhost:8000'
+  : (import.meta.env.VITE_API_URL || 'http://localhost:8000');
+
+function AppContent() {
+  const [user, setUser] = useState<{ email: string; name?: string; picture?: string } | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Process OAuth callback immediately - token in URL means we just came back from Google
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (window.location.pathname === '/login' && token) {
+      localStorage.setItem('yucg_token', token);
+      localStorage.setItem('yucg_token_time', String(Date.now()));
+      // Redirect to app root - http://localhost:5173/ (set VITE_APP_URL for custom URL)
+      const appRoot = import.meta.env.VITE_APP_URL || 'http://localhost:5173';
+      window.location.replace(appRoot.replace(/\/$/, '') + '/');
+      return;
+    }
+  }, []);
+
+  const checkAuth = () => {
+    const token = localStorage.getItem('yucg_token');
+    if (!token) {
+      setAuthLoading(false);
+      setUser(null);
+      return;
+    }
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        localStorage.removeItem('yucg_token');
+        localStorage.removeItem('yucg_token_time');
+        setUser(null);
+      } else if (payload.email) {
+        setUser({ email: payload.email, name: payload.name, picture: payload.picture });
+      }
+    } catch {
+      /* ignore */
+    }
+    fetch(`${API_BASE}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.authenticated && data.user) {
+          setUser(data.user);
+        } else {
+          // API said not authenticated - fallback: trust JWT if valid (handles backend restart / JWT_SECRET change)
+          const payload = (() => {
+            try {
+              const p = JSON.parse(atob(token.split('.')[1]));
+              return p?.email && p?.exp && p.exp * 1000 > Date.now() ? p : null;
+            } catch {
+              return null;
+            }
+          })();
+          if (payload) {
+            setUser({ email: payload.email, name: payload.name, picture: payload.picture });
+          } else {
+            localStorage.removeItem('yucg_token');
+            localStorage.removeItem('yucg_token_time');
+            setUser(null);
+          }
+        }
+      })
+      .catch(() => {
+        // Network error or API unreachable - keep user from JWT if valid
+        const token = localStorage.getItem('yucg_token');
+        if (token) {
+          try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            if (payload.email && payload.exp && payload.exp * 1000 > Date.now()) {
+              setUser({ email: payload.email, name: payload.name, picture: payload.picture });
+            } else {
+              setUser(null);
+            }
+          } catch {
+            setUser(null);
+          }
+        } else {
+          setUser(null);
+        }
+      })
+      .finally(() => setAuthLoading(false));
+  };
+
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('yucg_token');
+    localStorage.removeItem('yucg_token_time');
+    setUser(null);
+  };
+
+  // Loading: show spinner while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100">
+        <div className="text-center">
+          <div className="animate-spin w-10 h-10 border-2 border-deep-navy border-t-transparent rounded-full mx-auto mb-4" />
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Routes>
+      {/* Login page - only when NOT authenticated */}
+      <Route
+        path="/login"
+        element={
+          user ? (
+            <Navigate to="/" replace />
+          ) : (
+            <LoginPage />
+          )
+        }
+      />
+      {/* All other routes - require auth, show MainApp */}
+      <Route
+        path="/*"
+        element={
+          user ? (
+            <MainApp user={user} onLogout={handleLogout} />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      >
+        <Route index element={<Dashboard />} />
+        <Route path="scraper" element={<Scraper />} />
+        <Route path="studio" element={<EmailStudio />} />
+        <Route path="campaigns" element={<Campaigns />} />
+        <Route path="campaigns/:id" element={<CampaignDetail />} />
+        <Route path="analytics" element={<Analytics />} />
+        <Route path="settings" element={<Settings />} />
+      </Route>
+    </Routes>
+  );
+}
+
+function App() {
+  return (
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AppContent />
+      </BrowserRouter>
+    </ErrorBoundary>
+  );
+}
+
+export default App;

@@ -1,0 +1,108 @@
+"""
+AI Email Generation Engine - Powered by Ollama
+Generates unique, personalized emails per contact (not template fill-in)
+"""
+from ollama import chat
+from typing import Optional
+import json
+import re
+
+
+TONE_INSTRUCTIONS = {
+    "professional": "Use a formal, polished professional tone. Be respectful and business-appropriate.",
+    "conversational": "Use a warm, friendly conversational tone. Write like you're talking to a colleague.",
+    "bold": "Use a confident, direct tone. Be assertive and make a strong impression.",
+    "empathetic": "Use an understanding, empathetic tone. Acknowledge their challenges and show you care.",
+    "authority": "Use an authoritative, expert tone. Position yourself as a trusted advisor.",
+}
+
+LENGTH_INSTRUCTIONS = {
+    "ultra_short": "Write exactly 3 sentences. Be extremely concise.",
+    "short": "Write 5-7 sentences. Get to the point quickly.",
+    "standard": "Write 1-2 short paragraphs. Provide enough context without being verbose.",
+}
+
+ANGLE_INSTRUCTIONS = {
+    "pain_point": "Open by addressing a common pain point or challenge in their role/industry.",
+    "social_proof": "Open with a brief mention of results achieved for similar companies/roles.",
+    "case_study": "Open with a specific mini case study or success story relevant to them.",
+    "question_hook": "Open with a thought-provoking question that resonates with their situation.",
+    "compliment": "Open with a genuine compliment about their company, recent news, or achievements.",
+}
+
+
+def generate_email(
+    contact_name: str,
+    contact_title: str,
+    company_name: str,
+    company_domain: str,
+    tone: str = "professional",
+    length: str = "short",
+    angle: str = "pain_point",
+    custom_instructions: Optional[str] = None,
+    value_proposition: Optional[str] = None,
+    model: str = "llama3.2",
+) -> tuple[str, str]:
+    """
+    Generate a unique, personalized email for a contact using Ollama.
+    Returns (subject, body) tuple.
+    """
+    tone_inst = TONE_INSTRUCTIONS.get(tone, TONE_INSTRUCTIONS["professional"])
+    length_inst = LENGTH_INSTRUCTIONS.get(length, LENGTH_INSTRUCTIONS["short"])
+    angle_inst = ANGLE_INSTRUCTIONS.get(angle, ANGLE_INSTRUCTIONS["pain_point"])
+
+    value_prop = value_proposition or "our solution that helps companies like yours achieve better results"
+    custom = f"\n\nAdditional instructions: {custom_instructions}" if custom_instructions else ""
+
+    prompt = f"""You are an expert B2B sales email writer. Write a cold outreach email that feels genuinely personal and researched — NOT generic or templated.
+
+CONTACT CONTEXT:
+- Name: {contact_name or 'there'}
+- Title: {contact_title or 'professional'}
+- Company: {company_name or 'their company'}
+- Domain: {company_domain or 'their company'}
+
+WRITING GUIDELINES:
+- Tone: {tone_inst}
+- Length: {length_inst}
+- Opening angle: {angle_inst}
+- Value proposition to weave in: {value_prop}
+{custom}
+
+CRITICAL: The email must read like it was written by a human who did their homework. Reference their role, company, or industry naturally. No "I hope this email finds you well" or similar clichés.
+
+Respond with ONLY valid JSON in this exact format (no markdown, no explanation):
+{{"subject": "Your compelling subject line here", "body": "Full email body here. Use \\n for line breaks."}}"""
+
+    try:
+        response = chat(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        content = (response.message.content or "").strip()
+
+        # Extract JSON from response (handle markdown code blocks if present)
+        json_match = re.search(r"\{[\s\S]*\}", content)
+        if json_match:
+            data = json.loads(json_match.group())
+            subject = data.get("subject", "Quick question")
+            body = data.get("body", "").replace("\\n", "\n")
+            return subject, body
+        else:
+            # Fallback: treat entire response as body
+            lines = content.split("\n")
+            subject = lines[0].replace("Subject:", "").strip() if lines else "Quick question"
+            body = "\n".join(lines[1:]) if len(lines) > 1 else content
+            return subject, body
+
+    except Exception as e:
+        # Fallback to a simple template if Ollama fails
+        subject = f"Quick question for {contact_name or 'you'} at {company_name or 'your company'}"
+        body = f"""Hi {contact_name or 'there'},
+
+I noticed you're {contact_title or 'in a key role'} at {company_name or 'your company'}. I'd love to share how {value_proposition or 'we help companies like yours'} achieve better results.
+
+Would you be open to a brief conversation this week?
+
+Best regards"""
+        return subject, body

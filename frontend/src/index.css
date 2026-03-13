@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&family=Open+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --color-deep-navy: #1a2f5a;
+  --color-mid-navy: #1e3a6e;
+  --color-slate-blue: #3d5c82;
+  --color-steel-blue: #5b7fa6;
+  --color-light-steel: #8aaabf;
+  --color-pale-sky: #c8dced;
+}
+
+:root {
+  --yale-blue: #00356b;
+  --yale-blue-light: #286dc0;
+  --yale-blue-dark: #002244;
+  --deep-navy: #1a2f5a;
+  --mid-navy: #1e3a6e;
+  --slate-blue: #3d5c82;
+  --steel-blue: #5b7fa6;
+  --light-steel: #8aaabf;
+  --pale-sky: #c8dced;
+  --bg-primary: #e8eef4;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --text-primary: #1a2f5a;
+  --text-muted: #3d5c82;
+  --accent: #1a2f5a;
+  --accent-hover: #1e3a6e;
+  --border: #c8dced;
+  --success: #059669;
+  --warning: #d97706;
+}
+
+body {
+  margin: 0;
+  font-family: 'Lato', system-ui, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+}
+
+input, select, textarea {
+  background-color: white;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.page-enter {
+  animation: fadeIn 0.25s ease-out forwards;
+}
